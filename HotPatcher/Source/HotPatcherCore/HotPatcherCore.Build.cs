@@ -154,7 +154,7 @@ public class HotPatcherCore : ModuleRules
 			});
 		}
 
-		bool bEnablePackageContext = true;
+		bool bEnablePackageContext = false;
 		AddPublicDefinitions("WITH_PACKAGE_CONTEXT", (Version.MajorVersion > 4 || Version.MinorVersion > 23) && bEnablePackageContext);
 		if (Version.MajorVersion > 4 || Version.MinorVersion > 26)
 		{

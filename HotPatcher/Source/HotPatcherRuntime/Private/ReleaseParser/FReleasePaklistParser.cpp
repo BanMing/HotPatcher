@@ -69,7 +69,7 @@ void FReleasePaklistParser::Parser(TSharedPtr<FReleaseParserConf> ParserConf, EH
 							if(FPackageName::TryConvertFilenameToLongPackageName(AbsFile,LongPackageName))
 							{
 								FString PackagePath = UFlibAssetManageHelper::LongPackageNameToPackagePath(LongPackageName);
-								SpecifyAsset.Asset = FSoftObjectPath{PackagePath};
+								SpecifyAsset.Asset = FSoftObjectPath(PackagePath);
 								SpecifyAsset.bAnalysisAssetDependencies = false;
 								SpecifyAsset.AssetRegistryDependencyTypes = {EAssetRegistryDependencyTypeEx::None};
 								if(SpecifyAsset.Asset.IsValid())

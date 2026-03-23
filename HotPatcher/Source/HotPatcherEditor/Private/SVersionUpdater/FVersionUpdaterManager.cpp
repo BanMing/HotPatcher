@@ -5,7 +5,6 @@
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "HttpModule.h"
-#include "Kismet/KismetStringLibrary.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
@@ -120,7 +119,7 @@ void FVersionUpdaterManager::OnRequestComplete(FHttpRequestPtr RequestPtr, FHttp
 									FString ValueStr;
 									if(ModDescJsonObject->TryGetStringField(Name,ValueStr))
 									{
-										Result = UKismetStringLibrary::Conv_StringToFloat(ValueStr);
+										Result = FCString::Atof(*ValueStr);
 									}
 									return Result;
 								};

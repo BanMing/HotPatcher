@@ -84,7 +84,7 @@ int32 UHotPatcherCommandlet::Main(const FString& Params)
 					{
 						FString PackagePath = UFlibAssetManageHelper::LongPackageNameToPackagePath(PackageName);
 						FPatcherSpecifyAsset SpecifyAsset;
-						SpecifyAsset.Asset = FSoftObjectPath{PackagePath};
+						SpecifyAsset.Asset = FSoftObjectPath(PackagePath);
 						SpecifyAsset.bAnalysisAssetDependencies = false;
 						ExportPatchSetting->GetAssetScanConfigRef().IncludeSpecifyAssets.Add(SpecifyAsset);
 					}
