@@ -145,7 +145,7 @@ bool UFlibAssetManageHelper::GetAssetPackageGUID(FAssetDetail& AssetDetail)
 	if(!GetWPWorldGUID(AssetDetail))
 #endif
 	{
-		FSoftObjectPath PackagePath(AssetDetail.PackagePath);
+		FSoftObjectPath PackagePath(AssetDetail.PackagePath.ToString());
 		return GetAssetPackageGUID(PackagePath.GetLongPackageName(),AssetDetail.Guid);
 	}
 	return false;
@@ -157,7 +157,7 @@ bool UFlibAssetManageHelper::GetWPWorldGUID(FAssetDetail& AssetDetail)
 	bool bIsWPMap = false;
 	if(AssetDetail.AssetType.IsEqual(TEXT("World")))
 	{
-		FSoftObjectPath WorldPath(AssetDetail.PackagePath);
+		FSoftObjectPath WorldPath(AssetDetail.PackagePath.ToString());
 		FString Filename = FPackageName::LongPackageNameToFilename(WorldPath.GetLongPackageName(),FPackageName::GetMapPackageExtension());
 		if(FPaths::FileExists(Filename))
 		{
@@ -1411,7 +1411,7 @@ void UFlibAssetManageHelper::LoadPackageAsync(FSoftObjectPath ObjectPath,TFuncti
 UPackage* UFlibAssetManageHelper::LoadPackage(UPackage* InOuter, const TCHAR* InLongPackageName, uint32 LoadFlags,
 	FArchive* InReaderOverride)
 {
-#if ENGINE_MINOR_VERSION < 26
+#if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 26
 	FScopedNamedEvent CookPackageEvent(FColor::Red,*FString::Printf(TEXT("LoadPackage %s"),InLongPackageName));
 #endif
 	UE_LOG(LogHotPatcher,Verbose,TEXT("Load %s"),InLongPackageName);
@@ -1420,7 +1420,7 @@ UPackage* UFlibAssetManageHelper::LoadPackage(UPackage* InOuter, const TCHAR* In
 
 UPackage* UFlibAssetManageHelper::GetPackage(FName PackageName)
 {
-#if ENGINE_MINOR_VERSION < 26
+#if ENGINE_MAJOR_VERSION == 4 && ENGINE_MINOR_VERSION < 26
 	FScopedNamedEvent CookPackageEvent(FColor::Red,*FString::Printf(TEXT("GetPackage %s"),*PackageName.ToString()));
 #endif
 	if (PackageName == NAME_None)
@@ -1480,27 +1480,26 @@ TArray<UPackage*> UFlibAssetManageHelper::LoadPackagesForCooking(const TArray<FS
 		
 	}
 	
-	for(auto Package:AllPackages)
+for(auto Package:AllPackages)
+{
+#if WITH_EDITOR
+	if(!bStorageConcurrent && Package->IsFullyLoaded())
 	{
-		if(!bStorageConcurrent && Package->IsFullyLoaded())
-		{
-			UMetaData* MetaData = Package->GetMetaData();
-			if(MetaData)
-			{
-				MetaData->RemoveMetaDataOutsidePackage();
-			}
-		}
-		// Precache the metadata so we don't risk rehashing the map in the parallelfor below
-		if(bStorageConcurrent)
-		{
-			if(!Package->IsFullyLoaded())
-			{
-				Package->FullyLoad();
-			}
-			Package->GetMetaData();
-		}
+		FMetaData& MetaData = Package->GetMetaData();
+		MetaData.RemoveMetaDataOutsidePackage(Package);
 	}
-	GIsCookerLoadingPackage = false;
+	// Precache the metadata so we don't risk rehashing the map in the parallelfor below
+	if(bStorageConcurrent)
+	{
+		if(!Package->IsFullyLoaded())
+		{
+			Package->FullyLoad();
+		}
+		Package->GetMetaData();
+	}
+#endif
+}
+GIsCookerLoadingPackage = false;
 	return AllPackages;
 }
 
@@ -1775,7 +1774,7 @@ FAssetData UFlibAssetManageHelper::GetAssetByObjectPath(FName Path)
 	FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 	IAssetRegistry* AssetRegistry = &AssetRegistryModule.Get();
 #if WITH_UE5
-	return  AssetRegistry->GetAssetByObjectPath(FSoftObjectPath{Path}, true);
+	return  AssetRegistry->GetAssetByObjectPath(FSoftObjectPath(Path.ToString()), true);
 #else
 	return  AssetRegistry->GetAssetByObjectPath(Path, true);
 #endif
@@ -1834,3 +1833,5 @@ bool UFlibAssetManageHelper::GenerateMD5(const FString& Filename, FString& OutGU
 };
 
 // PRAGMA_ENABLE_DEPRECATION_WARNINGS
+
+

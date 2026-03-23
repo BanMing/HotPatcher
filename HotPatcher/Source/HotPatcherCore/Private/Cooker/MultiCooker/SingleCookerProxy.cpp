@@ -384,9 +384,6 @@ void USingleCookerProxy::ExecCookCluster(const FCookCluster& CookCluster,bool bW
 						PreCachePackages,
 						PlatformMaps,
 						CookCluster.CookActionCallback,
-		#if WITH_PACKAGE_CONTEXT
-						SavePackageContextsNameMapping,
-		#endif
 						CookedPlatformSavePaths,
 						bCanConcurrentSave
 						);

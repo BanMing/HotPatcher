@@ -94,9 +94,6 @@ public:
 		const TArray<UPackage*> Packages,
 		TMap<ETargetPlatform,ITargetPlatform*> CookPlatforms,
 		FCookActionCallback CookActionCallback,
-	#if WITH_PACKAGE_CONTEXT
-		class TMap<FString,FSavePackageContext*> PlatformSavePackageContext,
-	#endif
 		const TMap<FName,FString>& CookedPlatformSavePaths,
 		bool bStorageConcurrent
 	);

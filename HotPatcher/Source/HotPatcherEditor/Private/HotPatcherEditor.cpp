@@ -94,9 +94,7 @@ void FHotPatcherEditorModule::StartupModule()
 	if(::IsRunningCommandlet())
 		return;
 	
-	PRAGMA_DISABLE_DEPRECATION_WARNINGS
-	FCoreUObjectDelegates::OnObjectSaved.AddRaw(this,&FHotPatcherEditorModule::OnObjectSaved);
-	PRAGMA_ENABLE_DEPRECATION_WARNINGS
+	FCoreUObjectDelegates::OnObjectPreSave.AddRaw(this,&FHotPatcherEditorModule::OnObjectSaved);
 	MakeProjectSettingsForHotPatcher();
 
 	MissionNotifyProay = NewObject<UMissionNotificationProxy>();
@@ -173,11 +171,7 @@ void FHotPatcherEditorModule::PluginButtonClicked(const FSHotPatcherContext& Con
 	
 	if (!DockTab.IsValid())
 	{
-	#if UE_VERSION_OLDER_THAN(5,4,0)
-		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(HotPatcherTabName, FOnSpawnTab::CreateLambda([=](const class FSpawnTabArgs& InSpawnTabArgs)
-	#else
-		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(HotPatcherTabName, FOnSpawnTab::CreateLambda([=, this](const class FSpawnTabArgs& InSpawnTabArgs)
-	#endif
+		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(HotPatcherTabName, FOnSpawnTab::CreateLambda([this, Context](const class FSpawnTabArgs& InSpawnTabArgs)
 		{
 			return SpawnHotPatcherTab(Context);
 		}))
@@ -199,11 +193,7 @@ void FHotPatcherEditorModule::AddMenuExtension(FMenuBuilder& Builder)
 	Builder.AddSubMenu(
 		FText::FromString(TEXT("HotPatcher")),
 		FText::FromString(TEXT("HotPatcher")),
-	#if UE_VERSION_OLDER_THAN(5,4,0)
-		FNewMenuDelegate::CreateLambda([=](FMenuBuilder& Menu)
-	#else
-		FNewMenuDelegate::CreateLambda([=, this](FMenuBuilder& Menu)
-	#endif
+		FNewMenuDelegate::CreateLambda([this](FMenuBuilder& Menu)
 		{
 			Menu.AddWidget(this->HandlePickingModeContextMenu(),FText::FromString(TEXT("")),true);
 		}),
@@ -248,11 +238,7 @@ TSharedRef<SWidget> FHotPatcherEditorModule::HandlePickingModeContextMenu()
 			FText::FromString(TEXT("MAIN")),
 			FText::FromString(TEXT("MAIN")),
 			HotPatcherIcon,
-	#if UE_VERSION_OLDER_THAN(5,4,0)
-			FUIAction(FExecuteAction::CreateLambda([=]()
-	#else
-			FUIAction(FExecuteAction::CreateLambda([=, this]()
-	#endif
+			FUIAction(FExecuteAction::CreateLambda([this, Context]()
 			{
 				this->PluginButtonClicked(Context);
 			})));
@@ -284,11 +270,7 @@ TSharedRef<SWidget> FHotPatcherEditorModule::HandlePickingModeContextMenu()
 						FText::FromString(ActionName),
 						FText::FromString(ActionName),
 						FSlateIcon(),
-					#if UE_VERSION_OLDER_THAN(5,4,0)
-						FUIAction(FExecuteAction::CreateLambda([=]()
-					#else
-						FUIAction(FExecuteAction::CreateLambda([=, this]()
-					#endif
+						FUIAction(FExecuteAction::CreateLambda([this, Context]()
 						{
 							this->PluginButtonClicked(Context);
 						}))
@@ -453,11 +435,7 @@ void FHotPatcherEditorModule::MakeCookAndPakActionsSubMenu(UToolMenu* Menu)
 		FToolMenuEntry& PlatformEntry = Section.AddSubMenu(FName(*PlatformName),
 			FText::Format(LOCTEXT("Platform", "{0}"), UKismetTextLibrary::Conv_StringToText(THotPatcherTemplateHelper::GetEnumNameByValue(Platform))),
 			FText(),
-		#if UE_VERSION_OLDER_THAN(5,4,0)
-			FNewMenuDelegate::CreateLambda([=](FMenuBuilder& SubMenuBuilder){
-		#else
-			FNewMenuDelegate::CreateLambda([=, this](FMenuBuilder& SubMenuBuilder){
-		#endif
+			FNewMenuDelegate::CreateLambda([this, Platform](FMenuBuilder& SubMenuBuilder){
 				SubMenuBuilder.AddMenuEntry(
 					LOCTEXT("AnalysisDependencies", "AnalysisDependencies"), FText(),
 					FSlateIcon(*StyleSetName,TEXT("WorldBrowser.LevelsMenuBrush")),
@@ -481,11 +459,7 @@ void FHotPatcherEditorModule::MakeHotPatcherPresetsActionsSubMenu(UToolMenu* Men
 		Section.AddSubMenu(FName(*PakConfig.VersionId),
 		FText::Format(LOCTEXT("PakExternal_VersionID", "{0}"), UKismetTextLibrary::Conv_StringToText(PakConfig.VersionId)),
 			FText(),
-		#if UE_VERSION_OLDER_THAN(5,4,0)
-			FNewMenuDelegate::CreateLambda([=](FMenuBuilder& SubMenuBuilder)
-		#else
-			FNewMenuDelegate::CreateLambda([=, this](FMenuBuilder& SubMenuBuilder)
-		#endif
+			FNewMenuDelegate::CreateLambda([this, PakConfig](FMenuBuilder& SubMenuBuilder)
 			{
 				for (ETargetPlatform Platform : GetAllowCookPlatforms())
 				{
@@ -519,8 +493,7 @@ void FHotPatcherEditorModule::OnAddToPatchSettings(const FToolMenuContext& MenuC
 	for(const auto& AssetData:AssetsData)
 	{
 		FPatcherSpecifyAsset PatchSettingAssetElement;
-		FSoftObjectPath AssetObjectPath;
-		AssetObjectPath.SetPath(UFlibAssetManageHelper::GetObjectPathByAssetData(AssetData));
+		FSoftObjectPath AssetObjectPath(UFlibAssetManageHelper::GetObjectPathByAssetData(AssetData).ToString());
 		PatchSettingAssetElement.Asset = AssetObjectPath;
 		PatchSettingAssetElement.bAnalysisAssetDependencies = true;
 		AssetsSoftPath.AddUnique(PatchSettingAssetElement);
@@ -676,8 +649,9 @@ void FHotPatcherEditorModule::OnCookAndPakPlatform(ETargetPlatform Platform, boo
 	);
 }
 
-void FHotPatcherEditorModule::OnObjectSaved(UObject* ObjectSaved)
+void FHotPatcherEditorModule::OnObjectSaved(UObject* ObjectSaved, FObjectPreSaveContext SaveContext)
 {
+	(void)SaveContext;
 	if (GIsCookerLoadingPackage)
 	{
 		// This is the cooker saving a cooked package, ignore
