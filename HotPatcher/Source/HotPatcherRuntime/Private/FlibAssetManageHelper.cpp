@@ -94,7 +94,12 @@ void UFlibAssetManageHelper::UpdateAssetMangerDatabase(bool bForceRefresh)
 	SCOPED_NAMED_EVENT_TEXT("UpdateAssetMangerDatabase",FColor::Red);
 #if WITH_EDITOR
 	UAssetManager& AssetManager = UAssetManager::Get();
-	AssetManager.UpdateManagementDatabase(bForceRefresh);
+	EUpdateManagementDatabaseFlags UpdateFlags = EUpdateManagementDatabaseFlags::BuildChunkMap;
+	if (bForceRefresh)
+	{
+		UpdateFlags |= EUpdateManagementDatabaseFlags::ForceRefresh;
+	}
+	AssetManager.UpdateManagementDatabase(UpdateFlags);
 #endif
 }
 
@@ -271,7 +276,7 @@ FAssetDependenciesInfo UFlibAssetManageHelper::CombineAssetDependencies(const FA
 
 
 bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& LongPackageName,
-	const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
+	const TArray<EAssetRegistryDependencyTypeEx>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	bool bStatus = false;
 	{
@@ -283,27 +288,18 @@ bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& L
 
 		FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
 		TArray<FAssetIdentifier> ReferenceNames;
+		UE::AssetRegistry::EDependencyCategory DependencyCategory = UE::AssetRegistry::EDependencyCategory::None;
+		UE::AssetRegistry::FDependencyQuery DependencyQuery;
+		UFlibAssetManageHelper::BuildDependencyQueryFromTypes(SearchAssetDepTypes, DependencyCategory, DependencyQuery);
 		for (const FAssetIdentifier& AssetId : AssetIdentifier)
 		{
-			for (const auto& AssetDepType : SearchAssetDepTypes)
+			TArray<FAssetIdentifier> CurrentTypeReferenceNames;
+			AssetRegistryModule.Get().GetReferencers(AssetId, CurrentTypeReferenceNames, DependencyCategory, DependencyQuery);
+			for (const auto& Name : CurrentTypeReferenceNames)
 			{
-				TArray<FAssetIdentifier> CurrentTypeReferenceNames;
-
-				PRAGMA_DISABLE_DEPRECATION_WARNINGS
-				AssetRegistryModule.Get().GetReferencers(AssetId, CurrentTypeReferenceNames,
-#if UE_VERSION_OLDER_THAN(5,3,0)
-					AssetDepType
-#else
-					UE::AssetRegistry::EDependencyCategory::Package
-#endif
-				);
-				PRAGMA_ENABLE_DEPRECATION_WARNINGS
-				for (const auto& Name : CurrentTypeReferenceNames)
+				if (!(Name.PackageName.ToString() == LongPackageName))
 				{
-					if (!(Name.PackageName.ToString() == LongPackageName))
-					{
-						ReferenceNames.AddUnique(Name);
-					}
+					ReferenceNames.AddUnique(Name);
 				}
 			}
 			
@@ -323,7 +319,7 @@ bool UFlibAssetManageHelper::GetAssetReferenceByLongPackageName(const FString& L
 }
 
 
-bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, const TArray<EAssetRegistryDependencyType::Type>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
+bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, const TArray<EAssetRegistryDependencyTypeEx>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetReference",FColor::Red);
 	FString LongPackageName = UFlibAssetManageHelper::PackagePathToLongPackageName(InAsset.PackagePath.ToString());
@@ -331,7 +327,7 @@ bool UFlibAssetManageHelper::GetAssetReference(const FAssetDetail& InAsset, cons
 }
 
 void UFlibAssetManageHelper::GetAssetReferenceRecursively(const FAssetDetail& InAsset,
-                                                          const TArray<EAssetRegistryDependencyType::Type>&
+                                                          const TArray<EAssetRegistryDependencyTypeEx>&
                                                           SearchAssetDepTypes,
                                                           const TArray<FString>& SearchAssetsTypes,
                                                           TArray<FAssetDetail>& OutRefAsset, bool bRecursive)
@@ -380,13 +376,7 @@ void UFlibAssetManageHelper::GetAssetReferenceRecursively(const FAssetDetail& In
 bool UFlibAssetManageHelper::GetAssetReferenceEx(const FAssetDetail& InAsset, const TArray<EAssetRegistryDependencyTypeEx>& SearchAssetDepTypes, TArray<FAssetDetail>& OutRefAsset)
 {
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetReferenceEx",FColor::Red);
-	TArray<EAssetRegistryDependencyType::Type> local_SearchAssetDepTypes;
-	for (const auto& type : SearchAssetDepTypes)
-	{
-		local_SearchAssetDepTypes.AddUnique(UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(type));
-	}
-
-	return UFlibAssetManageHelper::GetAssetReference(InAsset, local_SearchAssetDepTypes, OutRefAsset);
+	return UFlibAssetManageHelper::GetAssetReference(InAsset, SearchAssetDepTypes, OutRefAsset);
 }
 
 FName UFlibAssetManageHelper::GetAssetType(FSoftObjectPath SoftObjectPath)
@@ -410,27 +400,24 @@ FAssetDetail UFlibAssetManageHelper::GetAssetDetailByPackageName(const FString& 
 	SCOPED_NAMED_EVENT_TEXT("UFlibAssetManageHelper::GetAssetDetailByPackageName",FColor::Red);
 	FAssetDetail AssetDetail;
 	UAssetManager& AssetManager = UAssetManager::Get();
-	if (AssetManager.IsValid())
 	{
 		FString PackagePath = UFlibAssetManageHelper::LongPackageNameToPackagePath(InPackageName);
-		{
-			FAssetData OutAssetData = AssetManager.GetAssetRegistry().GetAssetByObjectPath(
+		FAssetData OutAssetData = AssetManager.GetAssetRegistry().GetAssetByObjectPath(
 #if !UE_VERSION_OLDER_THAN(5,0,0)
 			FSoftObjectPath(PackagePath),
 #else
 			FName(*PackagePath),
 #endif
 			bIncludeOnlyOnDiskAssets);
-			if(OutAssetData.IsValid())
-			{
-				AssetDetail.PackagePath = UFlibAssetManageHelper::GetObjectPathByAssetData(OutAssetData);
-				AssetDetail.AssetType = UFlibAssetManageHelper::GetAssetDataClasses(OutAssetData);
+		if(OutAssetData.IsValid())
+		{
+			AssetDetail.PackagePath = UFlibAssetManageHelper::GetObjectPathByAssetData(OutAssetData);
+			AssetDetail.AssetType = UFlibAssetManageHelper::GetAssetDataClasses(OutAssetData);
 #if ENGINE_MAJOR_VERSION > 4				
-				UFlibAssetManageHelper::GetAssetPackageGUID(AssetDetail);
+			UFlibAssetManageHelper::GetAssetPackageGUID(AssetDetail);
 #else
-				UFlibAssetManageHelper::GetAssetPackageGUID(AssetDetail);
+			UFlibAssetManageHelper::GetAssetPackageGUID(AssetDetail);
 #endif				
-			}
 		}
 	}
 	return AssetDetail;
@@ -1220,9 +1207,82 @@ FString UFlibAssetManageHelper::ParserModuleAssetsNumMap(const TMap<FString, uin
 	return result;
 }
 
-EAssetRegistryDependencyType::Type UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(const EAssetRegistryDependencyTypeEx& InType)
+void UFlibAssetManageHelper::BuildDependencyQueryFromTypes(
+	const TArray<EAssetRegistryDependencyTypeEx>& InDependencyTypes,
+	UE::AssetRegistry::EDependencyCategory& OutCategory,
+	UE::AssetRegistry::FDependencyQuery& OutQuery)
 {
-	return static_cast<EAssetRegistryDependencyType::Type>((uint8)(InType));
+	OutCategory = UE::AssetRegistry::EDependencyCategory::None;
+	OutQuery = UE::AssetRegistry::FDependencyQuery();
+
+	bool bNeedSoftPackage = false;
+	bool bNeedHardPackage = false;
+	bool bNeedSearchableName = false;
+	bool bNeedSoftManage = false;
+	bool bNeedHardManage = false;
+
+	// UE5 removed EAssetRegistryDependencyType::Type and now expects a category + query model.
+	// This bridge keeps HotPatcher's existing Ex enum contract while routing every query through the modern API.
+	for (const EAssetRegistryDependencyTypeEx DependencyType : InDependencyTypes)
+	{
+		switch (DependencyType)
+		{
+		case EAssetRegistryDependencyTypeEx::Soft:
+			bNeedSoftPackage = true;
+			break;
+		case EAssetRegistryDependencyTypeEx::Hard:
+			bNeedHardPackage = true;
+			break;
+		case EAssetRegistryDependencyTypeEx::SearchableName:
+			bNeedSearchableName = true;
+			break;
+		case EAssetRegistryDependencyTypeEx::SoftManage:
+			bNeedSoftManage = true;
+			break;
+		case EAssetRegistryDependencyTypeEx::HardManage:
+			bNeedHardManage = true;
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (bNeedSoftPackage || bNeedHardPackage)
+	{
+		OutCategory |= UE::AssetRegistry::EDependencyCategory::Package;
+		if (bNeedSoftPackage && !bNeedHardPackage)
+		{
+			OutQuery.Excluded |= UE::AssetRegistry::EDependencyProperty::Hard;
+		}
+		else if (bNeedHardPackage && !bNeedSoftPackage)
+		{
+			OutQuery.Required |= UE::AssetRegistry::EDependencyProperty::Hard;
+		}
+	}
+
+	if (bNeedSearchableName)
+	{
+		OutCategory |= UE::AssetRegistry::EDependencyCategory::SearchableName;
+	}
+
+	if (bNeedSoftManage || bNeedHardManage)
+	{
+		OutCategory |= UE::AssetRegistry::EDependencyCategory::Manage;
+		if (bNeedSoftManage && !bNeedHardManage)
+		{
+			OutQuery.Excluded |= UE::AssetRegistry::EDependencyProperty::Direct;
+		}
+		else if (bNeedHardManage && !bNeedSoftManage)
+		{
+			OutQuery.Required |= UE::AssetRegistry::EDependencyProperty::Direct;
+		}
+	}
+
+	// Keep legacy behavior: when no type is provided, treat it as package dependencies.
+	if (OutCategory == UE::AssetRegistry::EDependencyCategory::None)
+	{
+		OutCategory = UE::AssetRegistry::EDependencyCategory::Package;
+	}
 }
 
 void UFlibAssetManageHelper::GetAssetDataInPaths(const TArray<FString>& Paths, TArray<FAssetData>& OutAssetData)

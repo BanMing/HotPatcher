@@ -1449,15 +1449,15 @@ TArray<FAssetDetail> UFlibHotPatcherCoreHelper::GetReferenceRecursivelyByClassNa
 {
 	TArray<FAssetDetail> Results;
 	
-	TArray<EAssetRegistryDependencyTypeEx> AssetRegistryDepTypes {EAssetRegistryDependencyTypeEx::Hard};
-	TArray<EAssetRegistryDependencyType::Type> SearchTypes;
-	for(auto TypeEx:AssetRegistryDepTypes)
+	// Respect caller-provided dependency types. Fallback to Hard package references to match previous behavior.
+	TArray<EAssetRegistryDependencyTypeEx> AssetRegistryDepTypes = RefType;
+	if (AssetRegistryDepTypes.Num() == 0)
 	{
-		SearchTypes.AddUnique(UFlibAssetManageHelper::ConvAssetRegistryDependencyToInternal(TypeEx));
+		AssetRegistryDepTypes.Add(EAssetRegistryDependencyTypeEx::Hard);
 	}
 	
 	TArray<FAssetDetail> CurrentAssetsRef;
-	UFlibAssetManageHelper::GetAssetReferenceRecursively(AssetDetail, SearchTypes, AssetTypeNames, CurrentAssetsRef,bRecursive);
+	UFlibAssetManageHelper::GetAssetReferenceRecursively(AssetDetail, AssetRegistryDepTypes, AssetTypeNames, CurrentAssetsRef,bRecursive);
 	for(const auto& Asset:CurrentAssetsRef)
 	{
 		if(!AssetTypeNames.Contains(Asset.AssetType.ToString()))
@@ -2582,12 +2582,14 @@ uint32 UFlibHotPatcherCoreHelper::GetCookSaveFlag(UPackage* Package, bool bUnver
 {
 	uint32 SaveFlags = SAVE_Async | (bUnversioned ? SAVE_Unversioned : 0);
 
-#if ENGINE_MAJOR_VERSION >4 || ENGINE_MINOR_VERSION >25
-	// bool CookLinkerDiff = false;
+#if UE_VERSION_OLDER_THAN(5,3,0)
+	// Linker diff save flag was removed in newer engine versions.
 	if(CookLinkerDiff)
 	{
 		SaveFlags |= SAVE_CompareLinker;
 	}
+#else
+	(void)CookLinkerDiff;
 #endif
 	if (bStorageConcurrent)
 	{
@@ -2669,11 +2671,6 @@ FString UFlibHotPatcherCoreHelper::GetSavePackageResultStr(ESavePackageResult Re
 			Str = TEXT("Error");
 			break;
 		}
-	case ESavePackageResult::DifferentContent:
-		{
-			Str = TEXT("DifferentContent");
-			break;
-		}
 	case ESavePackageResult::GenerateStub:
 		{
 			Str = TEXT("GenerateStub");
@@ -2694,9 +2691,9 @@ FString UFlibHotPatcherCoreHelper::GetSavePackageResultStr(ESavePackageResult Re
 			Str = TEXT("ContainsEditorOnlyData");
 			break;
 		}
-	case ESavePackageResult::ReferencedOnlyByEditorOnlyData:
+	default:
 		{
-			Str = TEXT("ReferencedOnlyByEditorOnlyData");
+			Str = TEXT("Unknown");
 			break;
 		}
 	}
