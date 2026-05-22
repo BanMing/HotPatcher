@@ -16,3 +16,4 @@ Content/Test/
 *.xcodeproj
 *.xcworkspace
 UpdateProject.bat
+production/session-logs
